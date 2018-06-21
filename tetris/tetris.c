@@ -3,6 +3,7 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/epoll.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <termios.h>
@@ -52,6 +53,24 @@ void printFig(figure_t f) {
   cup.f[f.th.x][f.th.y] = 2;
 }
 
+void setFig(figure_t f, int n) {
+  cup.f[f.st.x][f.st.y] = n;
+  cup.f[f.nd.x][f.nd.y] = n;
+  cup.f[f.rd.x][f.rd.y] = n;
+  cup.f[f.th.x][f.th.y] = n;
+}
+
+int mayFall(figure_t f) {
+  if ((cup.f[f.st.x][f.st.y + 1] == 1 || cup.f[f.st.x][f.st.y + 1] == 3) ||
+      (cup.f[f.nd.x][f.nd.y + 1] == 1 || cup.f[f.nd.x][f.nd.y + 1] == 3) ||
+      (cup.f[f.rd.x][f.rd.y + 1] == 1 || cup.f[f.rd.x][f.rd.y + 1] == 3) ||
+      (cup.f[f.th.x][f.th.y + 1] == 1 || cup.f[f.th.x][f.th.y + 1] == 3)) {
+    return 0;
+  }
+
+  return 1;
+}
+
 void f_i_print(figure_t f) { printCoords(f.st, f.nd, f.rd, f.th); }
 void f_i_rotate_cw(figure_t f) {}
 void f_i_rotate_ccw(figure_t f) {}
@@ -91,13 +110,13 @@ void spawnFigure(figure_t *g) {
   figure_t f = *g;
   f.a = (int)(7 * ((double)random() / (double)RAND_MAX)) + 1;
   f.p = 0;
-  f.a = f_i;
+  // f.a = f_i;
   switch (f.a) {
   case f_i:
     f.print = &printFig;
     f.rotate_cw = &f_i_rotate_cw;
     f.rotate_ccw = &f_i_rotate_ccw;
-    f.mayFall = &f_i_mayFall;
+    f.mayFall = &mayFall;
     f.st.x = 4;
     f.st.y = 0;
     f.nd.x = 5;
@@ -212,12 +231,16 @@ void printCup() {
   system("clear");
   for (int y = 0; y < c_heigth; y++) {
     for (int x = 0; x < c_width; x++) {
-      if (cup.f[x][y] == 1)
-        write(1, "\u25AF", 3);
-      else if (cup.f[x][y] == 2) {
+      if (cup.f[x][y] == 1) {
+        write(1, "\u25A0", 3);
+        write(1, " ", 1);
+      } else if (cup.f[x][y] == 2 || cup.f[x][y] == 3) {
         write(1, "\u25A3", 3);
-      } else
+        write(1, " ", 1);
+      } else {
         write(1, ".", 1);
+        write(1, " ", 1);
+      }
     }
     write(1, &s, 1);
   }
@@ -225,12 +248,8 @@ void printCup() {
 
 void step(figure_t *g, coords d) {
   figure_t f = *g;
-  cup.f[f.st.x][f.st.y] = 0;
-  cup.f[f.nd.x][f.nd.y] = 0;
-  cup.f[f.rd.x][f.rd.y] = 0;
-  cup.f[f.th.x][f.th.y] = 0;
-  if (f.mayFall(f)) {
-
+  if (mayFall(f)) {
+    setFig(f, 0);
     f.st.x += d.x;
     f.st.y += (d.y + 1);
     f.nd.x += d.x;
@@ -240,6 +259,10 @@ void step(figure_t *g, coords d) {
     f.th.x += d.x;
     f.th.y += (d.y + 1);
     f.print(f);
+    printCup();
+  } else {
+    setFig(f, 3);
+    spawnFigure(&f);
   }
   *g = f;
 }
@@ -267,12 +290,29 @@ int main(int argc, char const *argv[]) {
   printCup();
   // fcntl(1, O_NONBLOCK);
 
+  int pool = epoll_create1(0);
+  // IF...
+
+  struct epoll_event ev = {
+      .events = EPOLLIN
+      //, .data = {.fd = 0, /**/ .ptr = NULL, .u32 = 0, .u64 = 0 }
+  };
+  epoll_ctl(pool, EPOLL_CTL_ADD, 0, &ev);
+  // IF...
+
   while (1) {
-    usleep(1000000);
+
     d.x = 0;
     d.y = 0;
-    if (read(0, &c, 1) != -1) {
+    c = 0;
+
+    int n = epoll_wait(pool, &ev, 1, 500);
+
+    if (n == 0) {
       step(&fig, d);
+    } else if (read(0, &c, 1) < 1) {
+      // ....
+      printf("zhopa\n");
     } else {
       switch (c) {
       case 'q':
@@ -285,7 +325,7 @@ int main(int argc, char const *argv[]) {
         break;
       case 's':
         d.x = 0;
-        d.y = 1;
+        d.y = 0;
         break;
       case 'd':
         d.x = 1;
@@ -295,7 +335,7 @@ int main(int argc, char const *argv[]) {
       step(&fig, d);
       s = "\033[38;5;206m\u25A3 ";
       // write(1, s, 14);
-      printCup();
+      //  printCup();
     }
   }
   t.c_lflag &= ICANON;
