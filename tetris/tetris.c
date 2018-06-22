@@ -26,10 +26,10 @@ struct cup {
 };
 
 cup_t cup;
-
+figure_t fig;
 struct figure {
   int a : 16;
-  int p : 2;
+  int p : 4;
   coords st, nd, rd, th;
   void (*print)(figure_t);
   void (*rotate_cw)(figure_t);
@@ -71,52 +71,54 @@ int mayFall(figure_t f) {
   return 1;
 }
 
-void rotate_cw(figure_t f) {
-  int arr[3][3] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
-  arr[f.st.x % 3 - 1][f.st.y % 3 - 1] = 1;
-  arr[f.nd.x % 3 - 1][f.nd.y % 3 - 1] = 2;
-  arr[f.rd.x % 3 - 1][f.rd.y % 3 - 1] = 3;
-  arr[f.th.x % 3 - 1][f.th.y % 3 - 1] = 4;
-  for (int x = 0; x < 3 / 2; x++) {
-    for (int y = x; y < 3 - x - 1; y++) {
-      int tmp = arr[x][y];
-      arr[x][y] = arr[y][3 - 1 - x];
-      arr[y][3 - 1 - x] = arr[3 - 1 - x][3 - 1 - y];
-      arr[3 - 1 - x][3 - 1 - y] = arr[3 - 1 - y][x];
-      arr[3 - 1 - y][x] = tmp;
-    }
-  }
-  for (int x = 0; x < 3; x++) {
-    for (int y = 0; y < 3; y++) {
-      if (arr[x][y] == 1) {
-        f.st.x -= f.st.x % 3 - x;
-        f.st.y -= f.st.y % 3 - y;
-      } else if (arr[x][y] == 2) {
-        f.nd.x -= f.nd.x % 3 - x;
-        f.nd.y -= f.nd.y % 3 - y;
-      } else if (arr[x][y] == 3) {
-        f.rd.x -= f.rd.x % 3 - x;
-        f.rd.y -= f.rd.y % 3 - y;
-      } else if (arr[x][y] == 4) {
-        f.th.x -= f.th.x % 3 - x;
-        f.th.y -= f.th.y % 3 - y;
-      }
-    }
-  }
-}
-
 void f_i_print(figure_t f) { printCoords(f.st, f.nd, f.rd, f.th); }
-void f_i_rotate_cw(figure_t f) {
-  setFig(f, 0);
-  f.st.x += 2;
-  f.st.y -= 1;
-  f.nd.x += 1;
-  f.nd.y += 0;
-  f.rd.x = 0;
-  f.rd.y += 1;
-  f.th.x -= 1;
-  f.th.y += 2;
-  setFig(f, 2);
+void f_i_rotate_cw() {
+  switch (fig.p) {
+  case 0:
+    fig.st.x += 2;
+    fig.st.y -= 1;
+    fig.nd.x += 1;
+    fig.nd.y += 0;
+    fig.rd.x += 0;
+    fig.rd.y += 1;
+    fig.th.x -= 1;
+    fig.th.y += 2;
+    fig.p = 1;
+    break;
+  case 1:
+    fig.st.x += 1;
+    fig.st.y += 2;
+    fig.nd.x += 0;
+    fig.nd.y += 1;
+    fig.rd.x -= 1;
+    fig.rd.y += 0;
+    fig.th.x -= 2;
+    fig.th.y -= 1;
+    fig.p = 2;
+    break;
+  case 2:
+    fig.st.x -= 2;
+    fig.st.y += 1;
+    fig.nd.x -= 1;
+    fig.nd.y += 0;
+    fig.rd.x += 0;
+    fig.rd.y -= 1;
+    fig.th.x += 1;
+    fig.th.y -= 2;
+    fig.p = 3;
+    break;
+  case 3:
+    fig.st.x -= 1;
+    fig.st.y -= 2;
+    fig.nd.x += 0;
+    fig.nd.y -= 1;
+    fig.rd.x += 1;
+    fig.rd.y += 0;
+    fig.th.x += 2;
+    fig.th.y += 1;
+    fig.p = 0;
+    break;
+  }
 }
 void f_i_rotate_ccw(figure_t f) {}
 int f_i_mayFall(figure_t f) { return 1; }
@@ -155,11 +157,11 @@ void spawnFigure(figure_t *g) {
   figure_t f = *g;
   f.a = (int)(7 * ((double)random() / (double)RAND_MAX)) + 1;
   f.p = 0;
-  f.a = f_t;
+  f.a = f_i;
   switch (f.a) {
   case f_i:
     f.print = &printFig;
-    f.rotate_cw = &rotate_cw;
+    f.rotate_cw = &f_i_rotate_cw;
     f.rotate_ccw = &f_i_rotate_ccw;
     f.mayFall = &mayFall;
     f.st.x = 4;
@@ -187,7 +189,7 @@ void spawnFigure(figure_t *g) {
     break;
   case f_t:
     f.print = &printFig;
-    f.rotate_cw = &rotate_cw;
+    f.rotate_cw = &f_t_rotate_cw;
     f.rotate_ccw = &f_t_rotate_ccw;
     f.mayFall = &mayFall;
     f.st.x = 5;
@@ -319,8 +321,6 @@ int main(int argc, char const *argv[]) {
   char block[] = {0xE2, 0x96, 0xA3};
   char *s;
   coords d;
-
-  figure_t fig;
   tcgetattr(0, &t);
   t.c_lflag &= ~ICANON;
   t.c_lflag &= ~(ECHO | ECHOE | ECHOK | ECHONL);
@@ -363,7 +363,9 @@ int main(int argc, char const *argv[]) {
       case 'q':
         break;
       case 'e':
+        setFig(fig, 0);
         fig.rotate_cw(fig);
+        setFig(fig, 2);
         break;
       case 'a':
         if (fig.st.x - 1 > 0 && fig.nd.x - 1 > 0 && fig.rd.x - 1 > 0 &&
